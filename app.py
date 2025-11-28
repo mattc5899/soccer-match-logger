@@ -7,120 +7,106 @@ Original file is located at
     https://colab.research.google.com/drive/1UAjqyax7Z8aSo2p9DH4AP64B0GZI7P6T
 """
 
-# 印出歡迎訊息
-print("歡迎使用足球賽況紀錄器！")
+import streamlit as st
+import pandas as pd # 引入 pandas 是為了讓 dataframe顯示更漂亮
 
-# 詢問使用者主隊名稱並儲存
-home_team = input("主隊名稱 (Home Team) 是？ ")
+# ==============================================================================
+# 1. [狀態保存] 初始化狀態
+# Streamlit 每次互動都會重跑程式，所以必須檢查 session_state 是否已存在資料
+# ==============================================================================
 
-# 詢問使用者客隊名稱並儲存
-away_team = input("客隊名稱 (Away Team) 是？ ")
+# 初始化事件列表：這是我們的小型資料庫，存在記憶體中
+if 'events' not in st.session_state:
+    st.session_state['events'] = [] # [狀態保存] 這裡建立空列表，確保重跑時資料不會消失
 
-# 建立一個空的列表，用來稍後儲存所有進球紀錄
-match_events = []
+# 初始化隊伍名稱預設值
+if 'home_team' not in st.session_state:
+    st.session_state['home_team'] = "主隊"
+if 'away_team' not in st.session_state:
+    st.session_state['away_team'] = "客隊"
 
-# 印出比賽開始訊息
-print("比賽開始！等待指令中...")
+# ==============================================================================
+# 2. 介面標題
+# ==============================================================================
+st.title("⚽ 足球賽況記錄器")
 
-# 使用無窮迴圈讓程式持續執行，直到使用者輸入 'end'
-while True:
-    # 詢問使用者輸入指令
-    command = input("請輸入指令 (goal / end)： ")
+# ==============================================================================
+# 3. 側邊欄：隊伍設定 & 進球紀錄表單
+# ==============================================================================
+with st.sidebar:
+    st.header("1. 隊伍設定")
+    # [狀態保存] 使用 key 參數將輸入框直接綁定到 session_state
+    home_name = st.text_input("主隊名稱", key='home_team') 
+    away_name = st.text_input("客隊名稱", key='away_team')
 
-    # 判斷使用者輸入的指令
-    if command == "end":
-        # 如果是 'end'，印出比賽結束訊息並跳出迴圈
-        print("比賽結束")
-        break
-    elif command == "goal":
-        # 如果是 'goal'，印出準備紀錄進球的訊息
-        print("準備紀錄進球...")
+    st.divider() # 分隔線
 
-        # 詢問進球球隊
-        team_choice = input("進球球隊 (1 代表主隊, 2 代表客隊)： ")
-        team_name = ""
-        if team_choice == "1":
-            team_name = home_team
-        elif team_choice == "2":
-            team_name = away_team
-        else:
-            print("無效的球隊選擇，請重新輸入指令。")
-            continue # 跳過本次迴圈，重新詢問指令
+    st.header("2. 紀錄操作")
+    
+    # 建立一個可折疊的區塊 (Expander)
+    with st.expander("紀錄進球", expanded=True):
+        
+        # --- 表單輸入元件 ---
+        # 選項會隨著上面的隊伍名稱動態改變
+        team_input = st.radio("進球球隊", [home_name, away_name])
+        
+        time_input = st.number_input("進球時間 (分鐘)", min_value=0, max_value=125, step=1)
+        
+        zone_input = st.selectbox("進球區域", ["左路", "中路", "右路", "定位球"])
+        
+        type_input = st.selectbox("進球方式", ["射門", "頭槌", "點球"])
+        
+        # 為了資料完整性，我保留了原本邏輯中的球員欄位
+        scorer_input = st.text_input("得分球員")
+        assist_input = st.text_input("助攻球員 (選填)", value="無")
 
-        # 詢問進球時間
-        try:
-            goal_time = int(input("進球時間 (第幾分鐘?)： "))
-        except ValueError:
-            print("時間輸入無效，請輸入數字。請重新輸入指令。")
-            continue # 跳過本次迴迴圈，重新詢問指令
+        # --- [狀態保存] 寫入數據的核心邏輯 ---
+        if st.button("確認進球"):
+            # 1. 將收集到的變數包裝成字典 (Dictionary)
+            new_event = {
+                'team': team_input,
+                'time': time_input,
+                'zone': zone_input,
+                'type': type_input,
+                'scorer': scorer_input,
+                'assist': assist_input
+            }
+            
+            # 2. [狀態保存] 將字典 append 到 session_state['events'] 列表中
+            st.session_state['events'].append(new_event)
+            
+            # 3. 顯示成功訊息 (會短暫顯示)
+            st.success(f"已紀錄：{time_input}' {team_input} 進球！")
 
-        # 詢問進球區域
-        goal_zone = input("進球區域 (左路/中路/右路/定位球)： ")
+# ==============================================================================
+# 4. 主畫面：顯示結果
+# ==============================================================================
 
-        # 詢問進球方式
-        goal_type = input("進球方式 (射門/頭槌/點球)： ")
+# 檢查是否有資料
+if len(st.session_state['events']) > 0:
+    st.subheader("📊 目前賽況紀錄")
+    
+    # [狀態保存] 從 session_state 中讀取所有資料並顯示
+    # 使用 Pandas DataFrame 可以讓表格可以排序、放大
+    df = pd.DataFrame(st.session_state['events'])
+    
+    # 調整欄位顯示順序（美觀用）
+    st.dataframe(
+        df, 
+        column_config={
+            "team": "球隊",
+            "time": "時間 (分)",
+            "zone": "區域",
+            "type": "方式",
+            "scorer": "得分者",
+            "assist": "助攻"
+        },
+        use_container_width=True
+    )
+    
+    # 簡單顯示最新的一筆紀錄
+    last_event = st.session_state['events'][-1]
+    st.caption(f"最新動態：第 {last_event['time']} 分鐘，{last_event['scorer']} ({last_event['team']}) 得分。")
 
-        # 新增詢問得分球員
-        scorer = input("得分球員 (人名/球衣號碼)： ")
-
-        # 新增詢問助攻球員
-        assist_player = input("助攻球員 (人名/球衣號碼/無)： ")
-
-        # 將進球資訊包裝成字典
-        goal_event = {
-            'team': team_name,
-            'time': goal_time,
-            'zone': goal_zone,
-            'type': goal_type,
-            'scorer': scorer,
-            'assist': assist_player
-        }
-
-        # 將字典加入 match_events 列表中
-        match_events.append(goal_event)
-
-        # 印出紀錄成功訊息
-        print("紀錄成功！")
-
-        # 每次紀錄成功後，顯示目前比分和進球紀錄
-        current_home_score = 0
-        current_away_score = 0
-        for event in match_events:
-            if event['team'] == home_team:
-                current_home_score += 1
-            elif event['team'] == away_team:
-                current_away_score += 1
-
-        print("\n--- 目前比分 ---")
-        print(f"{home_team} {current_home_score} : {current_away_score} {away_team}")
-
-        print("\n--- 進球紀錄 ---")
-        if not match_events:
-            print("本場比賽沒有進球紀錄。")
-        else:
-            for event in match_events:
-                print(f"第 {event['time']} 分鐘 - [{event['team']}] - {event['zone']} - {event['type']} - 進球者: {event['scorer']} - 助攻者: {event['assist']}")
-
-    else:
-        # 如果是其他指令，印出錯誤訊息
-        print("指令錯誤，請重新輸入")
-
-# 比賽結束後的最終統計 (當break跳出迴圈時執行)
-final_home_score = 0
-final_away_score = 0
-
-for event in match_events:
-    if event['team'] == home_team:
-        final_home_score += 1
-    elif event['team'] == away_team:
-        final_away_score += 1
-
-print("\n--- 最終比分 ---")
-print(f"{home_team} {final_home_score} : {final_away_score} {away_team}")
-
-print("\n--- 最終進球紀錄 ---")
-if not match_events:
-    print("本場比賽沒有進球紀錄。")
 else:
-    for event in match_events:
-        print(f"第 {event['time']} 分鐘 - [{event['team']}] - {event['zone']} - {event['type']} - 進球者: {event['scorer']} - 助攻者: {event['assist']}")
+    st.info("👈 請在側邊欄輸入隊伍名稱，並展開「紀錄進球」開始紀錄。")
